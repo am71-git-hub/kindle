@@ -26,6 +26,7 @@
 | **Python 3.9** | `kindle-python-0.14.N-r18833.tar.xz` (Legacy thread) | Full Python 3 on device: requests, Pillow, image generation |
 | **Screensaver Hack** | `kindle-ss-0.47.N-r18980.tar.xz` (Legacy thread) | Replace sleep screensavers with custom PNG — shows weather while Kindle is "off" |
 
+> find at https://www.mobileread.com/forums/showthread.php?t=88004#google_vignette
 > **The Screensaver Hack is the key to low-power wall display:**  
 > If we write our weather PNG into the screensaver folder, the Kindle shows fresh weather data  
 > whenever it sleeps — which is normally. E-ink holds the image at **zero power draw**.

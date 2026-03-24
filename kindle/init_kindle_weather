@@ -1,0 +1,23 @@
+#!/bin/sh
+# /etc/init.d/kindle-weather
+# SysV init script for Kindle weather flip daemon.
+# Symlink to /etc/rc5.d/S99kindle-weather to auto-start on boot.
+#
+# Install:
+#   mntroot rw
+#   cp init_kindle_weather /etc/init.d/kindle-weather
+#   chmod +x /etc/init.d/kindle-weather
+#   ln -sf /etc/init.d/kindle-weather /etc/rc5.d/S99kindle-weather
+#   mntroot ro
+
+case "$1" in
+  start)
+    /bin/sh /mnt/us/weather/weather_flip.sh >> /mnt/us/weather/flip.log 2>&1 &
+    ;;
+  stop)
+    killall weather_flip.sh 2>/dev/null || true
+    ;;
+  *)
+    echo "Usage: $0 {start|stop}"
+    ;;
+esac

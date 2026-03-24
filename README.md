@@ -81,9 +81,67 @@ systemctl --user enable --now kindle-weather
 
 The daemon fetches Open-Meteo every 3 hours and writes `weather.png` to the project directory.
 
-### 2. Kindle — SSH key (Kindle → Ubuntu)
+### 2. Ubuntu → Kindle SSH key auth
 
-SSH into the Kindle from Ubuntu, then on the Kindle:
+This is trickier than it looks. Three separate gotchas:
+
+**Gotcha 1: Dropbear, not OpenSSH**
+
+The SSH server on the Kindle is **Dropbear v2015.68** (from USBNetwork), not OpenSSH.
+Dropbear 2015.68 does not support ed25519 keys. Use RSA.
+
+**Gotcha 2: Root's home is a tmpfs**
+
+`/etc/passwd` shows root's home as `/tmp/root`. That directory is a tmpfs — it is
+wiped on every reboot. Dropbear looks for `~/.ssh/authorized_keys`, so it reads
+`/tmp/root/.ssh/authorized_keys`, which is gone after each boot.
+
+The authorized_keys must be written there on every boot (see step 4 — the init script
+does this automatically by copying from `/mnt/us/weather/authorized_keys`).
+
+**Gotcha 3: Ubuntu's OpenSSH uses rsa-sha2-256/512 by default**
+
+Ubuntu 22.04+ OpenSSH prefers `rsa-sha2-256` or `rsa-sha2-512` signature algorithms.
+Dropbear 2015.68 only speaks the old `ssh-rsa` (SHA-1). Auth silently fails.
+
+Fix — add to `~/.ssh/config` on Ubuntu:
+```
+Host kindle
+  HostName <kindle-ip>
+  User root
+  IdentityFile ~/.ssh/id_rsa
+  IdentitiesOnly yes
+  PreferredAuthentications publickey
+  PubkeyAcceptedKeyTypes ssh-rsa
+```
+
+**Setup steps:**
+
+On Ubuntu, copy your RSA public key:
+```bash
+cat ~/.ssh/id_rsa.pub
+```
+
+SSH into the Kindle with password, then write the key to the tmpfs location:
+```sh
+mkdir -p /tmp/root/.ssh && chmod 700 /tmp/root/.ssh
+echo "ssh-rsa AAAA...your-key... user@host" > /tmp/root/.ssh/authorized_keys
+chmod 600 /tmp/root/.ssh/authorized_keys
+```
+
+Also save it to a persistent location so the init script can restore it on each boot:
+```sh
+cp /tmp/root/.ssh/authorized_keys /mnt/us/weather/authorized_keys
+```
+
+Test from Ubuntu:
+```bash
+ssh kindle 'echo ok'
+```
+
+### 3. Kindle — SSH key (Kindle → Ubuntu)
+
+SSH into the Kindle, then generate a key on the Kindle itself:
 
 ```sh
 mkdir -p /root/.ssh && chmod 700 /root/.ssh
@@ -95,13 +153,14 @@ Copy the printed public key into `~/.ssh/authorized_keys` on Ubuntu.
 
 Add Ubuntu's host key to the Kindle's known_hosts:
 ```sh
-ssh-keyscan -H <your-ubuntu-ip> >> /root/.ssh/known_hosts
+/mnt/us/usbnet/bin/ssh-keyscan -H <your-ubuntu-ip> >> /root/.ssh/known_hosts
 ```
 
-> **Note:** The Kindle ships with OpenSSH 7.0p1. Ubuntu 22.04+ disables `ssh-rsa` (SHA-1).
-> Use `ed25519` — it works on both ends without any server config changes.
+> **Note:** Use ed25519 for this direction (Kindle → Ubuntu). Ubuntu 22.04+ rejects
+> `ssh-rsa` from clients. The Kindle's USBNetwork `ssh-keygen` generates ed25519 in
+> OpenSSH format, which works fine.
 
-### 3. Kindle — deploy scripts
+### 4. Kindle — deploy scripts
 
 From Ubuntu:
 ```bash
@@ -110,7 +169,7 @@ scp kindle/rtcwake.py kindle/weather_flip.sh kindle:/mnt/us/weather/
 
 Edit `UBUNTU_IP` and `UBUNTU_USER` in `weather_flip.sh` to match your server.
 
-### 4. Kindle — auto-start on boot
+### 5. Kindle — auto-start on boot
 
 ```sh
 # SSH into Kindle:
@@ -224,6 +283,9 @@ with Floyd-Steinberg dithering, which looks good on the K3W screen.
 | `lipc-send-event com.lab126.powerd userSleep` | "Failed to open LIPC" from SSH context |
 | `ssh-rsa` keys for Kindle → Ubuntu | Ubuntu 22.04+ rejects ssh-rsa; use ed25519 |
 | `dropbearkey` to generate SSH keys | Generates dropbear format; Kindle uses OpenSSH 7.0 which needs OpenSSH format |
+| ed25519 key for Ubuntu → Kindle | Dropbear 2015.68 does not support ed25519; use RSA |
+| Writing authorized_keys to `/root/.ssh/` | Root home is `/tmp/root` (tmpfs); Dropbear reads `/tmp/root/.ssh/authorized_keys` which is wiped on reboot |
+| `ssh kindle` auth silently fails despite correct RSA key | Ubuntu OpenSSH 8.9+ sends `rsa-sha2-256`; Dropbear 2015.68 only accepts `ssh-rsa`; fix: `PubkeyAcceptedKeyTypes ssh-rsa` in `~/.ssh/config` |
 
 ---
 
